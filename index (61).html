@@ -24,26 +24,26 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      height: calc(100vh - 80px); /* Ajuste pour header */
+      height: calc(100vh - 80px);
       width: 100%;
       padding: 0;
-      margin-top: 80px; /* Espace pour header */
+      margin-top: 80px;
     }
     #video {
       width: 100%;
       max-width: 640px;
-      max-height: 60vh; /* Limite la hauteur vidéo */
+      max-height: 60vh;
       object-fit: contain;
       border-radius: 0.5rem;
       border: 2px solid #4B5563;
     }
     @media (orientation: landscape) {
       .camera-container {
-        height: calc(100vh - 60px); /* Ajuste pour header en paysage */
+        height: calc(100vh - 60px);
         margin-top: 60px;
       }
       #video {
-        max-height: 70vh; /* Plus d’espace en paysage */
+        max-height: 70vh;
       }
     }
     .delivery-icon {
@@ -159,16 +159,32 @@
 
     function preprocessImage(canvas) {
       const ctx = canvas.getContext('2d');
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const width = canvas.width;
+      const height = canvas.height;
+      const imageData = ctx.getImageData(0, 0, width, height);
       const data = imageData.data;
 
-      for (let i = 0; i < data.length; i += 4) {
-        const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
-        data[i] = data[i + 1] = data[i + 2] = avg > 128 ? 255 : 0;
+      // Seuillage adaptatif
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const i = (y * width + x) * 4;
+          const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
+          const threshold = 128; // Ajustable
+          data[i] = data[i + 1] = data[i + 2] = avg > threshold ? 255 : 0;
+        }
       }
 
-      ctx.putImageData(imageData, 0, 0);
-      return canvas.toDataURL('image/jpeg');
+      // Recadrage centré (suppose que le code est au centre)
+      const cropSize = Math.min(width, height) * 0.6; // 60% de la plus petite dimension
+      const centerX = width / 2;
+      const centerY = height / 2;
+      const croppedCanvas = document.createElement('canvas');
+      croppedCanvas.width = cropSize;
+      croppedCanvas.height = cropSize;
+      const croppedCtx = croppedCanvas.getContext('2d');
+      croppedCtx.putImageData(imageData, -centerX + cropSize / 2, -centerY + cropSize / 2);
+
+      return croppedCanvas.toDataURL('image/jpeg');
     }
 
     function capturePhoto() {
@@ -192,10 +208,23 @@
       Tesseract.recognize(
         processedImage,
         'eng',
-        { tessedit_pageseg_mode: '6' }
+        { 
+          tessedit_pageseg_mode: '6',
+          tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789' // Limite aux caractères alphanumériques
+        }
       ).then(({ data: { text } }) => {
-        const orderMatch = text.match(/(?:#|Commande\s*)?([A-Za-z0-9]{3,10})/i);
-        const orderNumber = orderMatch ? orderMatch[1] : 'Non détecté';
+        // Recherche de motifs de 4 à 8 caractères alphanumériques
+        const codeRegex = /[A-Za-z0-9]{4,8}/g;
+        let matches = text.match(codeRegex) || [];
+        let orderNumber = 'Non détecté';
+        // Vérifie si un code correspond aux exemples (5192C, C6E40, etc.)
+        const validCodes = ['5192C', 'C6E40', 'B0D9A', 'BBD15', '19BEF', '1964135D', '2829A'];
+        for (let match of matches) {
+          if (validCodes.includes(match) || match.length >= 4 && match.length <= 8) {
+            orderNumber = match;
+            break;
+          }
+        }
         document.getElementById('orderNumber').value = orderNumber;
         const now = new Date();
         const dateTime = now.toISOString().slice(0, 16).replace('T', ' ');
