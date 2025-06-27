@@ -1,11 +1,10 @@
 {
-  "name": "Photos Commandes McDo",
-  "short_name": "McDo Photos",
-  "description": "Application pour capturer et gérer les photos de commandes McDonald's",
-  "start_url": "./index.html",
+  "name": "Commandes McDo",
+  "short_name": "McDo",
+  "start_url": "/index.html",
   "display": "standalone",
-  "background_color": "#1a1a1a",
-  "theme_color": "#1a1a1a",
+  "background_color": "#1F2937",
+  "theme_color": "#FFD700",
   "icons": [
     {
       "src": "./logo.png",
