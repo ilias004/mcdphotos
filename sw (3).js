@@ -2,7 +2,7 @@ self.addEventListener('install', event => {
   event.waitUntil(
     caches.open('mcd-photos-v1').then(cache => {
       return cache.addAll([
-        './index.html',
+        './index (61).html',
         './logo.png',
         './skip.png',
         './doordash.png',
