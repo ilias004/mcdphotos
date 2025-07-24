@@ -1,51 +1,12 @@
-<script type="text/javascript">
-        var gk_isXlsx = false;
-        var gk_xlsxFileLookup = {};
-        var gk_fileData = {};
-        function filledCell(cell) {
-          return cell !== '' && cell != null;
-        }
-        function loadFileData(filename) {
-        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
-            try {
-                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
-                var firstSheetName = workbook.SheetNames[0];
-                var worksheet = workbook.Sheets[firstSheetName];
-
-                // Convert sheet to JSON to filter blank rows
-                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
-                // Filter out blank rows (rows where all cells are empty, null, or undefined)
-                var filteredData = jsonData.filter(row => row.some(filledCell));
-
-                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
-                var headerRowIndex = filteredData.findIndex((row, index) =>
-                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
-                );
-                // Fallback
-                if (headerRowIndex === -1 || headerRowIndex > 25) {
-                  headerRowIndex = 0;
-                }
-
-                // Convert filtered JSON back to CSV
-                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
-                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
-                return csv;
-            } catch (e) {
-                console.error(e);
-                return "";
-            }
-        }
-        return gk_fileData[filename] || "";
-        }
-        </script><!DOCTYPE html>
-<html lang="en">
+<!DOCTYPE html>
+<html lang="fr">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>Order Photo Management</title>
+  <title>Gestion des Photos de Commandes</title>
   <link rel="manifest" href="./manifest.json">
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://unpkg.com/tesseract.js@4.0.2/dist/tesseract.min.js"></script>
+  <script src="https://unpkg.com/tesseract.js@v2.1.0/dist/tesseract.min.js"></script>
   <style>
     #orderList::-webkit-scrollbar { display: none; }
     #orderList {
@@ -53,99 +14,139 @@
       scrollbar-width: none;
       -webkit-overflow-scrolling: touch;
     }
-    body { overflow: hidden; }
-    .delivery-icon { width: 48px; height: 48px; object-fit: contain; }
+    html, body {
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+    }
+    .camera-container {
+      position: relative;
+      width: 95vw;
+      height: 95vh;
+      max-width: 95vw;
+      max-height: 95vh;
+      margin: auto;
+      overflow: hidden;
+    }
+    #video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: 0;
+      border: none;
+    }
+    .capture-button {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 70px;
+      height: 70px;
+      background: #FFD700;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 4px solid #FFF;
+      cursor: pointer;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+    }
+    .capture-button svg {
+      width: 40px;
+      height: 40px;
+      stroke: #FFF;
+      fill: none;
+    }
+    .controls {
+      position: absolute;
+      top: 15px;
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      padding: 0 15px;
+      z-index: 10;
+    }
+    .controls img {
+      height: 40px;
+      object-fit: contain;
+    }
+    .controls button {
+      background: none;
+      border: none;
+      color: #FFD700;
+      font-size: 18px;
+      font-weight: bold;
+      padding: 5px 10px;
+      cursor: pointer;
+    }
+    @media (orientation: landscape) {
+      .camera-container {
+        height: 95vw;
+        width: 95vh;
+      }
+      #video {
+        height: 100%;
+        width: 100%;
+      }
+      .capture-button {
+        bottom: 20px;
+      }
+    }
   </style>
 </head>
-<body class="bg-gray-900 text-white font-sans flex flex-col items-center justify-center min-h-screen">
-  <div class="w-full flex justify-between items-center p-4 fixed top-0 z-10">
-    <img src="./logo.png" alt="McDonald's Logo" class="h-10">
-    <button id="adminBtn" class="text-yellow-400 text-lg font-bold">Admin</button>
-  </div>
-
-  <div class="flex flex-col items-center justify-center mt-16 w-full px-2">
-    <video id="video" class="w-11/12 max-w-lg aspect-[4/3] bg-black rounded-lg border-2 border-gray-700"></video>
-    <canvas id="canvas" class="hidden"></canvas>
-    <div class="mt-4 flex items-center">
-      <svg onclick="capturePhoto()" class="w-14 h-14 text-yellow-400 cursor-pointer" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-        <circle cx="12" cy="12" r="10" stroke-width="2"/>
-      </svg>
+<body>
+  <div class="camera-container">
+    <div class="controls">
+      <img src="./logo.png" alt="Logo McDonald's" class="h-10">
+      <button id="adminBtn">Admin</button>
     </div>
-    <p id="status" class="text-sm text-gray-400 mt-2 text-center">Point the ticket at the frame.</p>
-  </div>
-
-  <div id="confirmModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-20">
-    <div class="bg-gray-800 p-4 rounded-lg w-11/12 max-w-sm">
-      <p class="text-lg mb-2">Detected Number:</p>
-      <input type="text" id="orderNumber" class="border p-2 w-full rounded bg-gray-700 text-white mb-2" placeholder="Order number">
-      <p class="text-sm mb-2">Date & Time: <span id="orderDateTime"></span></p>
-      <div class="flex justify-between">
-        <button onclick="confirmOrder()" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">Confirm</button>
-        <button onclick="closeModal()" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600">Cancel</button>
-      </div>
+    <video id="video" class="bg-black" playsinline></video>
+    <div class="capture-button" onclick="capturePhoto()">
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="12" cy="12" r="6" stroke-width="2"/>
+      </svg>
     </div>
   </div>
 
   <div id="adminPanel" class="fixed inset-0 bg-gray-900 p-4 hidden z-10">
-    <button onclick="closeAdmin()" class="text-yellow-400 text-lg font-bold mb-4">Close</button>
+    <button onclick="closeAdmin()" class="text-yellow-400 text-lg font-bold mb-4">Fermer</button>
     <div class="mb-4">
-      <h2 class="text-lg font-semibold mb-2">Search Orders</h2>
-      <input type="text" id="searchOrder" placeholder="Order number" class="border p-2 w-full rounded bg-gray-700 text-white mb-2" oninput="searchOrders()">
-      <div class="flex gap-2 mb-2">
-        <button onclick="filterByDelivery('all')" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">All</button>
-        <button onclick="filterByDelivery('skip')" class="bg-gray-700 p-2 rounded hover:bg-gray-600">
-          <img src="./skip.png" alt="Skip" class="delivery-icon">
-        </button>
-        <button onclick="filterByDelivery('doordash')" class="bg-gray-700 p-2 rounded hover:bg-gray-600">
-          <img src="./doordash.png" alt="DoorDash" class="delivery-icon">
-        </button>
-        <button onclick="filterByDelivery('uber')" class="bg-gray-700 p-2 rounded hover:bg-gray-600">
-          <img src="./uber.png" alt="Uber" class="delivery-icon">
-        </button>
-      </div>
-      <input type="datetime-local" id="searchDateTime" class="border p-2 w-full rounded bg-gray-700 text-white mb-2" step="1" min="2025-01-01T00:00" max="2025-12-31T23:59" oninput="searchOrders()">
+      <h2 class="text-lg font-semibold mb-2">Rechercher une commande</h2>
+      <input type="text" id="searchOrder" placeholder="Tapez le code de commande" class="border p-2 w-full rounded bg-gray-700 text-white mb-2" oninput="searchOrders()">
     </div>
-    <div id="orderList" class="grid grid-cols-2 gap-4 max-h-[calc(100vh-200px)] overflow-y-auto"></div>
+    <div id="orderList" class="grid grid-cols-2 gap-4 max-h-[calc(100vh-120px)] overflow-y-auto"></div>
   </div>
 
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('./sw.js')
-        .then(reg => console.log('Service Worker registered', reg))
-        .catch(err => console.log('Service Worker error:', err));
+        .then(reg => console.log('Service Worker enregistré', reg))
+        .catch(err => console.log('Erreur Service Worker :', err));
     }
 
     let currentPhotoData = null;
-    let currentDeliveryType = 'all';
 
     document.addEventListener('DOMContentLoaded', () => {
       localStorage.clear();
       displayOrders();
       if (document.documentElement.requestFullscreen) {
-        document.documentElement.requestFullscreen().catch(err => console.log('Fullscreen error:', err));
+        document.documentElement.requestFullscreen().catch(err => console.log('Erreur plein écran :', err));
       }
       initializeCamera();
     });
 
-    function detectDeliveryType(orderNumber) {
-      if (/^\d{5}$/.test(orderNumber)) return 'skip';
-      if (/^[A-Za-z0-9]{8}$/.test(orderNumber) && /[A-Za-z]/.test(orderNumber)) return 'doordash';
-      if (/^[A-Za-z0-9]{5}$/.test(orderNumber) && /[A-Za-z]/.test(orderNumber)) return 'uber';
-      return null;
-    }
-
     function initializeCamera() {
       const video = document.getElementById('video');
-      const status = document.getElementById('status');
 
       if (window.location.protocol !== 'https:') {
-        status.textContent = 'Error: Use HTTPS to enable camera.';
+        console.log('Erreur : Utilisez HTTPS pour activer la caméra.');
         return;
       }
 
       navigator.mediaDevices.getUserMedia({ 
         video: { 
-          facingMode: 'environment',
+          facingMode: { ideal: 'environment' },
           width: { ideal: 640 },
           height: { ideal: 480 }
         }
@@ -153,35 +154,18 @@
       .then(stream => {
         video.srcObject = stream;
         video.play();
-        status.textContent = 'Point the ticket at the frame.';
       })
       .catch(err => {
-        status.textContent = `Camera error: ${err.message}. Check permissions.`;
-        console.error('Camera error:', err);
+        console.error('Erreur caméra :', err);
       });
     }
 
-    function preprocessImage(canvas) {
-      const ctx = canvas.getContext('2d');
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const data = imageData.data;
-
-      for (let i = 0; i < data.length; i += 4) {
-        const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
-        data[i] = data[i + 1] = data[i + 2] = avg > 128 ? 255 : 0;
-      }
-
-      ctx.putImageData(imageData, 0, 0);
-      return canvas.toDataURL('image/jpeg');
-    }
-
-    function capturePhoto() {
+    async function capturePhoto() {
       const video = document.getElementById('video');
-      const canvas = document.getElementById('canvas');
-      const status = document.getElementById('status');
+      const canvas = document.createElement('canvas');
 
       if (!video.srcObject) {
-        status.textContent = 'Camera not available. Check HTTPS and permissions.';
+        console.log('Caméra non disponible. Vérifiez HTTPS et permissions.');
         return;
       }
 
@@ -190,61 +174,32 @@
       const ctx = canvas.getContext('2d');
       ctx.drawImage(video, 0, 0);
       currentPhotoData = canvas.toDataURL('image/jpeg');
-      const processedImage = preprocessImage(canvas);
-      status.textContent = 'Detecting number...';
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-      Tesseract.recognize(
-        processedImage,
-        'eng',
-        { tessedit_pageseg_mode: '6' }
-      ).then(({ data: { text } }) => {
-        const orderMatch = text.match(/(?:#|Order\s*)?([A-Za-z0-9]{3,10})/i);
-        const orderNumber = orderMatch ? orderMatch[1] : 'Not detected';
-        document.getElementById('orderNumber').value = orderNumber;
-        const now = new Date();
-        const dateTime = now.toISOString().slice(0, 16).replace('T', ' ');
-        document.getElementById('orderDateTime').textContent = dateTime;
-        document.getElementById('confirmModal').classList.remove('hidden');
-        status.textContent = orderNumber === 'Not detected' ? 'Number not detected. Enter manually.' : 'Check the detected number.';
-      }).catch(err => {
-        status.textContent = 'OCR error. Enter number manually.';
-        document.getElementById('orderNumber').value = 'Not detected';
-        const now = new Date();
-        document.getElementById('orderDateTime').textContent = now.toISOString().slice(0, 16).replace('T', ' ');
-        document.getElementById('confirmModal').classList.remove('hidden');
+      // Detect delivery type and code
+      const { data: { text } } = await Tesseract.recognize(imageData, 'eng', {
+        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
       });
-    }
+      let deliveryType = 'unknown';
+      let code = '';
+      if (text.toLowerCase().includes('door')) deliveryType = 'DoorDash';
+      else if (text.toLowerCase().includes('uber')) deliveryType = 'Uber';
+      else if (text.toLowerCase().includes('skip')) deliveryType = 'Skip';
+      const codeMatch = text.match(/[A-Za-z0-9]{3,8}/);
+      if (codeMatch) code = codeMatch[0];
 
-    function confirmOrder() {
-      const orderNumber = document.getElementById('orderNumber').value;
-      const orderDateTime = document.getElementById('orderDateTime').textContent;
-
-      if (!orderNumber || !currentPhotoData || orderNumber === 'Not detected') {
-        alert('Please enter a valid order number.');
-        return;
-      }
-
-      const deliveryType = detectDeliveryType(orderNumber);
+      const now = new Date();
+      const dateTime = now.toISOString().slice(0, 16).replace('T', ' ');
       const orders = JSON.parse(localStorage.getItem('orders')) || [];
-      const order = {
+      orders.push({
         id: Date.now(),
-        number: orderNumber,
-        dateTime: orderDateTime,
         photo: currentPhotoData,
-        deliveryType: deliveryType
-      };
-      orders.push(order);
+        dateTime: dateTime,
+        deliveryType: deliveryType,
+        code: code
+      });
       localStorage.setItem('orders', JSON.stringify(orders));
-      closeModal();
-      document.getElementById('status').textContent = 'Order saved. Ready for next.';
       displayOrders();
-    }
-
-    function closeModal() {
-      document.getElementById('confirmModal').classList.add('hidden');
-      document.getElementById('orderNumber').value = '';
-      document.getElementById('orderDateTime').textContent = '';
-      currentPhotoData = null;
     }
 
     document.getElementById('adminBtn').addEventListener('click', () => {
@@ -256,7 +211,6 @@
     function closeAdmin() {
       document.getElementById('adminPanel').classList.add('hidden');
       document.getElementById('video').parentElement.classList.remove('hidden');
-      displayOrders();
     }
 
     function sharePhoto(photoData, orderNumber) {
@@ -264,13 +218,13 @@
         fetch(photoData)
           .then(res => res.blob())
           .then(blob => {
-            const file = new File([blob], `order_${orderNumber}.jpg`, { type: 'image/jpeg' });
+            const file = new File([blob], `commande_${orderNumber}.jpg`, { type: 'image/jpeg' });
             navigator.share({
               files: [file],
-              title: `Order #${orderNumber}`,
-              text: `Photo of order #${orderNumber}`
+              title: `Commande #${orderNumber}`,
+              text: `Photo de la commande #${orderNumber}`
             }).catch(err => {
-              console.log('Share error:', err);
+              console.log('Erreur de partage :', err);
               downloadPhoto(photoData, orderNumber);
             });
           });
@@ -282,52 +236,56 @@
     function downloadPhoto(photoData, orderNumber) {
       const a = document.createElement('a');
       a.href = photoData;
-      a.download = `order_${orderNumber}.jpg`;
+      a.download = `commande_${orderNumber}.jpg`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
     }
 
-    function filterByDelivery(type) {
-      currentDeliveryType = type;
-      searchOrders();
-    }
-
     function displayOrders(filteredOrders = JSON.parse(localStorage.getItem('orders')) || []) {
       const orderList = document.getElementById('orderList');
       orderList.innerHTML = '';
-      filteredOrders.sort((a, b) => b.id - a.id);
-      filteredOrders.forEach(order => {
+      filteredOrders.sort((a, b) => b.id - a.id).forEach(order => {
         const div = document.createElement('div');
         div.className = 'bg-gray-800 p-4 rounded-lg relative';
-        const iconSrc = order.deliveryType === 'skip' ? './skip.png' :
-                        order.deliveryType === 'doordash' ? './doordash.png' :
-                        order.deliveryType === 'uber' ? './uber.png' : '';
+        const displayCode = order.code ? `${order.code} (${order.deliveryType})` : `Non détecté (${order.deliveryType})`;
         div.innerHTML = `
           <div class="flex justify-between items-center">
-            <p><strong>Order #${order.number}</strong></p>
-            <svg onclick="sharePhoto('${order.photo}', '${order.number}')" class="w-8 h-8 text-yellow-400 cursor-pointer" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <p><strong>Date et heure: ${order.dateTime}</strong></p>
+            <svg onclick="sharePhoto('${order.photo}', 'photo_${order.id}')" class="w-8 h-8 text-yellow-400 cursor-pointer" fill="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
               <circle cx="12" cy="12" r="10"/>
             </svg>
           </div>
-          <p>Date & Time: ${order.dateTime}</p>
-          ${iconSrc ? `<img src="${iconSrc}" alt="${order.deliveryType}" class="absolute top-0 left-1/2 transform -translate-x-1/2 delivery-icon mt-2">` : ''}
-          <img src="${order.photo}" alt="Order photo" class="w-full h-48 object-cover rounded mt-2">
+          <p><strong>Code: ${displayCode}</strong></p>
+          <img src="${order.photo}" alt="Photo de la commande" class="w-full h-48 object-cover rounded mt-2">
         `;
         orderList.appendChild(div);
       });
     }
 
     function searchOrders() {
-      const searchNumber = document.getElementById('searchOrder').value.toLowerCase();
-      const searchDateTime = document.getElementById('searchDateTime').value;
+      const searchText = document.getElementById('searchOrder').value.toLowerCase();
       const orders = JSON.parse(localStorage.getItem('orders')) || [];
-      const filteredOrders = orders.filter(order => 
-        (searchNumber ? order.number.toLowerCase().includes(searchNumber) : true) &&
-        (currentDeliveryType === 'all' || order.deliveryType === currentDeliveryType || order.deliveryType === null) &&
-        (searchDateTime ? order.dateTime.startsWith(searchDateTime.slice(0, 10)) : true)
-      );
-      displayOrders(filteredOrders);
+      const filteredOrders = orders.filter(order => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const img = new Image();
+        img.src = order.photo;
+        img.onload = () => {
+          canvas.width = img.width;
+          canvas.height = img.height;
+          ctx.drawImage(img, 0, 0);
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          Tesseract.recognize(imageData, 'eng', {
+            tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+          }).then(({ data: { text } }) => {
+            return text.toLowerCase().includes(searchText);
+          }).then(match => {
+            if (match) displayOrders([order]);
+          });
+        };
+      });
+      if (!searchText) displayOrders(orders);
     }
 
     displayOrders();
