@@ -80,6 +80,11 @@
       padding: 5px 10px;
       cursor: pointer;
     }
+    .delivery-icon {
+      width: 40px;
+      height: 40px;
+      object-fit: contain;
+    }
     @media (orientation: landscape) {
       .camera-container {
         height: 95vw;
@@ -186,37 +191,41 @@
         return;
       }
 
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(video, 0, 0);
-      currentPhotoData = canvas.toDataURL('image/jpeg');
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      try {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0);
+        currentPhotoData = canvas.toDataURL('image/jpeg');
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-      // Detect delivery type and code
-      const { data: { text } } = await Tesseract.recognize(imageData, 'eng', {
-        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
-      });
-      let deliveryType = 'unknown';
-      let code = '';
-      if (text.toLowerCase().includes('door')) deliveryType = 'DoorDash';
-      else if (text.toLowerCase().includes('uber')) deliveryType = 'Uber';
-      else if (text.toLowerCase().includes('skip')) deliveryType = 'Skip';
-      const codeMatch = text.match(/[A-Za-z0-9]{3,8}/);
-      if (codeMatch) code = codeMatch[0];
+        // Detect delivery type and code
+        const { data: { text } } = await Tesseract.recognize(imageData, 'eng', {
+          tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+        });
+        let deliveryType = 'unknown';
+        let code = '';
+        if (text.toLowerCase().includes('door')) deliveryType = 'DoorDash';
+        else if (text.toLowerCase().includes('uber')) deliveryType = 'Uber';
+        else if (text.toLowerCase().includes('skip')) deliveryType = 'Skip';
+        const codeMatch = text.match(/[A-Za-z0-9]{3,8}/);
+        if (codeMatch) code = codeMatch[0];
 
-      const now = new Date();
-      const dateTime = now.toISOString().slice(0, 16).replace('T', ' ');
-      const orders = JSON.parse(localStorage.getItem('orders')) || [];
-      orders.push({
-        id: Date.now(),
-        photo: currentPhotoData,
-        dateTime: dateTime,
-        deliveryType: deliveryType,
-        code: code
-      });
-      localStorage.setItem('orders', JSON.stringify(orders));
-      displayOrders();
+        const now = new Date();
+        const dateTime = now.toISOString().slice(0, 16).replace('T', ' ');
+        const orders = JSON.parse(localStorage.getItem('orders')) || [];
+        orders.push({
+          id: Date.now(),
+          photo: currentPhotoData,
+          dateTime: dateTime,
+          deliveryType: deliveryType,
+          code: code
+        });
+        localStorage.setItem('orders', JSON.stringify(orders));
+        displayOrders();
+      } catch (err) {
+        console.error('Erreur lors de la capture :', err);
+      }
     }
 
     document.getElementById('adminBtn').addEventListener('click', () => {
