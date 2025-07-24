@@ -99,7 +99,7 @@
       }
     }
     #adminPanel input {
-      background-color: #fff;
+      background-color: #4B5563;
       color: #000;
     }
   </style>
@@ -121,8 +121,8 @@
   <div id="adminPanel" class="fixed inset-0 bg-gray-900 p-4 hidden z-10">
     <button onclick="closeAdmin()" class="text-yellow-400 text-lg font-bold mb-4">Fermer</button>
     <div class="mb-4">
-      <h2 class="text-lg font-semibold mb-2">Rechercher une commande</h2>
-      <input type="text" id="searchOrder" placeholder="Tapez le code de commande" class="border p-2 w-full rounded bg-white text-black mb-2" oninput="searchOrders()">
+      <h2 class="text-lg font-semibold mb-2 text-black">Rechercher une commande</h2>
+      <input type="text" id="searchOrder" placeholder="Tapez le code de commande" class="border p-2 w-full rounded bg-gray-700 text-white mb-2" oninput="searchOrders()">
       <div class="flex gap-2 mb-2">
         <button onclick="filterByDelivery('all')" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">Tous</button>
         <button onclick="filterByDelivery('skip')" class="bg-gray-700 p-2 rounded hover:bg-gray-600">
@@ -148,6 +148,7 @@
 
     let currentPhotoData = null;
     let currentDeliveryType = 'all';
+    let stream = null;
 
     document.addEventListener('DOMContentLoaded', () => {
       localStorage.clear();
@@ -173,7 +174,8 @@
           height: { ideal: 480 }
         }
       })
-      .then(stream => {
+      .then(s => {
+        stream = s;
         video.srcObject = stream;
         video.play();
       })
@@ -182,12 +184,12 @@
       });
     }
 
-    async function capturePhoto() {
+    function capturePhoto() {
       const video = document.getElementById('video');
       const canvas = document.createElement('canvas');
 
-      if (!video.srcObject) {
-        console.log('Caméra non disponible. Vérifiez HTTPS et permissions.');
+      if (!video.srcObject || !stream) {
+        console.log('Caméra non initialisée. Vérifiez les permissions.');
         return;
       }
 
@@ -197,35 +199,54 @@
         const ctx = canvas.getContext('2d');
         ctx.drawImage(video, 0, 0);
         currentPhotoData = canvas.toDataURL('image/jpeg');
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-        // Detect delivery type and code
+        // Lancer la détection en arrière-plan
+        detectAndSave(currentPhotoData);
+
+      } catch (err) {
+        console.error('Erreur lors de la capture :', err);
+      }
+    }
+
+    async function detectAndSave(photoData) {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const img = new Image();
+      img.src = photoData;
+      await new Promise(resolve => { img.onload = resolve; });
+
+      canvas.width = img.width;
+      canvas.height = img.height;
+      ctx.drawImage(img, 0, 0);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+      let deliveryType = 'unknown';
+      let code = '';
+      try {
         const { data: { text } } = await Tesseract.recognize(imageData, 'eng', {
           tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
         });
-        let deliveryType = 'unknown';
-        let code = '';
         if (text.toLowerCase().includes('door')) deliveryType = 'DoorDash';
         else if (text.toLowerCase().includes('uber')) deliveryType = 'Uber';
         else if (text.toLowerCase().includes('skip')) deliveryType = 'Skip';
         const codeMatch = text.match(/[A-Za-z0-9]{3,8}/);
         if (codeMatch) code = codeMatch[0];
-
-        const now = new Date();
-        const dateTime = now.toISOString().slice(0, 16).replace('T', ' ');
-        const orders = JSON.parse(localStorage.getItem('orders')) || [];
-        orders.push({
-          id: Date.now(),
-          photo: currentPhotoData,
-          dateTime: dateTime,
-          deliveryType: deliveryType,
-          code: code
-        });
-        localStorage.setItem('orders', JSON.stringify(orders));
-        displayOrders();
       } catch (err) {
-        console.error('Erreur lors de la capture :', err);
+        console.error('Erreur de détection :', err);
       }
+
+      const now = new Date();
+      const dateTime = now.toISOString().slice(0, 16).replace('T', ' ');
+      const orders = JSON.parse(localStorage.getItem('orders')) || [];
+      orders.push({
+        id: Date.now(),
+        photo: photoData,
+        dateTime: dateTime,
+        deliveryType: deliveryType,
+        code: code
+      });
+      localStorage.setItem('orders', JSON.stringify(orders));
+      displayOrders();
     }
 
     document.getElementById('adminBtn').addEventListener('click', () => {
