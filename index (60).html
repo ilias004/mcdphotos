@@ -93,6 +93,10 @@
         bottom: 20px;
       }
     }
+    #adminPanel input {
+      background-color: #fff;
+      color: #000;
+    }
   </style>
 </head>
 <body>
@@ -113,7 +117,19 @@
     <button onclick="closeAdmin()" class="text-yellow-400 text-lg font-bold mb-4">Fermer</button>
     <div class="mb-4">
       <h2 class="text-lg font-semibold mb-2">Rechercher une commande</h2>
-      <input type="text" id="searchOrder" placeholder="Tapez le code de commande" class="border p-2 w-full rounded bg-gray-700 text-white mb-2" oninput="searchOrders()">
+      <input type="text" id="searchOrder" placeholder="Tapez le code de commande" class="border p-2 w-full rounded bg-white text-black mb-2" oninput="searchOrders()">
+      <div class="flex gap-2 mb-2">
+        <button onclick="filterByDelivery('all')" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">Tous</button>
+        <button onclick="filterByDelivery('skip')" class="bg-gray-700 p-2 rounded hover:bg-gray-600">
+          <img src="./skip.png" alt="Skip" class="delivery-icon">
+        </button>
+        <button onclick="filterByDelivery('doordash')" class="bg-gray-700 p-2 rounded hover:bg-gray-600">
+          <img src="./doordash.png" alt="DoorDash" class="delivery-icon">
+        </button>
+        <button onclick="filterByDelivery('uber')" class="bg-gray-700 p-2 rounded hover:bg-gray-600">
+          <img src="./uber.png" alt="Uber" class="delivery-icon">
+        </button>
+      </div>
     </div>
     <div id="orderList" class="grid grid-cols-2 gap-4 max-h-[calc(100vh-120px)] overflow-y-auto"></div>
   </div>
@@ -126,6 +142,7 @@
     }
 
     let currentPhotoData = null;
+    let currentDeliveryType = 'all';
 
     document.addEventListener('DOMContentLoaded', () => {
       localStorage.clear();
@@ -266,26 +283,33 @@
     function searchOrders() {
       const searchText = document.getElementById('searchOrder').value.toLowerCase();
       const orders = JSON.parse(localStorage.getItem('orders')) || [];
-      const filteredOrders = orders.filter(order => {
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        const img = new Image();
-        img.src = order.photo;
-        img.onload = () => {
-          canvas.width = img.width;
-          canvas.height = img.height;
-          ctx.drawImage(img, 0, 0);
-          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          Tesseract.recognize(imageData, 'eng', {
-            tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
-          }).then(({ data: { text } }) => {
-            return text.toLowerCase().includes(searchText);
-          }).then(match => {
-            if (match) displayOrders([order]);
-          });
-        };
+      let filteredOrders = orders.filter(order => {
+        if (currentDeliveryType === 'all' || order.deliveryType === currentDeliveryType) {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          const img = new Image();
+          img.src = order.photo;
+          img.onload = () => {
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx.drawImage(img, 0, 0);
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            Tesseract.recognize(imageData, 'eng', {
+              tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+            }).then(({ data: { text } }) => {
+              return text.toLowerCase().includes(searchText);
+            }).then(match => {
+              if (match) displayOrders([order]);
+            });
+          };
+        }
       });
-      if (!searchText) displayOrders(orders);
+      if (!searchText && currentDeliveryType === 'all') displayOrders(orders);
+    }
+
+    function filterByDelivery(type) {
+      currentDeliveryType = type;
+      searchOrders();
     }
 
     displayOrders();
